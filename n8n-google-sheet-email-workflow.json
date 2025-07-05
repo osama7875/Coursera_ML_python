@@ -1,0 +1,243 @@
+{
+  "name": "Daily Google Sheet Email Summary",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "daily-summary",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "daily-summary-webhook"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "sheet",
+        "operation": "read",
+        "documentId": "YOUR_GOOGLE_SHEET_ID",
+        "sheetName": "Sheet1",
+        "range": "A:Z",
+        "options": {
+          "headerRow": true
+        }
+      },
+      "id": "b2c3d4e5-f6g7-8901-bcde-f23456789012",
+      "name": "Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 3,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-oauth",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process Google Sheets data to create summary\nconst items = $input.all();\nconst data = items[0].json.values || [];\n\n// Calculate summary statistics\nconst totalRows = data.length;\nconst headers = data[0] || [];\nconst dataRows = data.slice(1);\n\n// Create summary object\nconst summary = {\n  totalRecords: totalRows - 1, // excluding header\n  columns: headers.length,\n  lastUpdated: new Date().toISOString(),\n  columnNames: headers,\n  sampleData: dataRows.slice(0, 5) // first 5 rows as sample\n};\n\n// Generate HTML email content\nconst emailContent = `\n<html>\n<head>\n  <style>\n    body { font-family: Arial, sans-serif; margin: 20px; }\n    h1 { color: #333; }\n    h2 { color: #666; }\n    table { border-collapse: collapse; width: 100%; margin: 20px 0; }\n    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }\n    th { background-color: #f2f2f2; }\n    .summary-box { background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 10px 0; }\n  </style>\n</head>\n<body>\n  <h1>📊 Daily Google Sheet Summary</h1>\n  \n  <div class=\"summary-box\">\n    <h2>📈 Summary Statistics</h2>\n    <ul>\n      <li><strong>Total Records:</strong> ${summary.totalRecords}</li>\n      <li><strong>Columns:</strong> ${summary.columns}</li>\n      <li><strong>Last Updated:</strong> ${new Date(summary.lastUpdated).toLocaleString()}</li>\n    </ul>\n  </div>\n  \n  <h2>📋 Column Names</h2>\n  <p>${summary.columnNames.join(', ')}</p>\n  \n  <h2>🔍 Sample Data (First 5 Rows)</h2>\n  <table>\n    <tr>\n      ${summary.columnNames.map(col => `<th>${col}</th>`).join('')}\n    </tr>\n    ${summary.sampleData.map(row => \n      `<tr>${row.map(cell => `<td>${cell || ''}</td>`).join('')}</tr>`\n    ).join('')}\n  </table>\n  \n  <hr>\n  <p><em>This is an automated daily summary from your Google Sheet.</em></p>\n</body>\n</html>\n`;\n\n// Generate plain text version\nconst plainTextContent = `\nDAILY GOOGLE SHEET SUMMARY\n==========================\n\nSummary Statistics:\n- Total Records: ${summary.totalRecords}\n- Columns: ${summary.columns}\n- Last Updated: ${new Date(summary.lastUpdated).toLocaleString()}\n\nColumn Names:\n${summary.columnNames.join(', ')}\n\nSample Data (First 5 Rows):\n${summary.sampleData.map((row, index) => \n  `Row ${index + 1}: ${row.join(' | ')}`\n).join('\\n')}\n\n---\nThis is an automated daily summary from your Google Sheet.\n`;\n\nreturn {\n  json: {\n    summary,\n    emailContent,\n    plainTextContent,\n    subject: `Daily Sheet Summary - ${summary.totalRecords} records (${new Date().toLocaleDateString()})`\n  }\n};"
+      },
+      "id": "c3d4e5f6-g7h8-9012-cdef-345678901234",
+      "name": "Process Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "YOUR_RECIPIENT_EMAIL@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.plainTextContent }}",
+        "options": {
+          "attachments": [],
+          "ccList": "",
+          "bccList": "",
+          "replyTo": "",
+          "htmlMessage": "={{ $json.emailContent }}"
+        }
+      },
+      "id": "d4e5f6g7-h8i9-0123-def0-456789012345",
+      "name": "Send Gmail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "gmail-oauth",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"success\", \"message\": \"Daily summary email sent successfully\", \"timestamp\": new Date().toISOString(), \"recordsProcessed\": $node[\"Process Data\"].json.summary.totalRecords } }}"
+      },
+      "id": "e5f6g7h8-i9j0-1234-efg1-567890123456",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "f6g7h8i9-j0k1-2345-fgh2-678901234567",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        240,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/webhook/daily-summary",
+        "options": {}
+      },
+      "id": "g7h8i9j0-k1l2-3456-ghi3-789012345678",
+      "name": "Call Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        460,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "operation": "equal",
+              "value2": "success"
+            }
+          ]
+        }
+      },
+      "id": "h8i9j0k1-l2m3-4567-hij4-890123456789",
+      "name": "Check Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        680,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Process Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Data": {
+      "main": [
+        [
+          {
+            "node": "Send Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Gmail": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Call Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "timezone": "America/New_York",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "your-n8n-instance-id"
+  },
+  "pinData": {},
+  "versionId": "1.0.0",
+  "triggerCount": 2,
+  "createdAt": "2024-01-01T00:00:00.000Z",
+  "updatedAt": "2024-01-01T00:00:00.000Z"
+}
